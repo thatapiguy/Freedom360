@@ -4,7 +4,7 @@ import { useActiveHousehold } from "@/lib/hooks";
 import { PeopleForm } from "@/components/forms/PeopleForm";
 import { AccountsForm } from "@/components/forms/AccountsForm";
 import { IncomeForm } from "@/components/forms/IncomeForm";
-import { OneTimeForm } from "@/components/forms/OneTimeForm";
+import { LifeEventsForm } from "@/components/forms/LifeEventsForm";
 import { AssumptionsForm } from "@/components/forms/AssumptionsForm";
 import { DataManagement } from "@/components/forms/DataManagement";
 
@@ -23,7 +23,7 @@ export default function ProfilePage() {
       <PeopleForm household={household} setHousehold={setHousehold} />
       <AccountsForm household={household} setHousehold={setHousehold} />
       <IncomeForm household={household} setHousehold={setHousehold} />
-      <OneTimeForm household={household} setHousehold={setHousehold} />
+      <LifeEventsForm household={household} setHousehold={setHousehold} />
       <AssumptionsForm household={household} setHousehold={setHousehold} />
       <DataManagement />
     </div>

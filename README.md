@@ -24,6 +24,10 @@ about Empower's free planner is that using it gets you a sales call.
   table.
 - **FIRE tools** — Coast FIRE and Barista FIRE calculators for retiring
   before a traditional retirement age.
+- **Life events** — spending goals (wedding, home purchase, education, ...)
+  and income events (inheritance, rental income, work during retirement, ...)
+  tied to any stage of life, one-time or recurring, each actually modeled
+  into your projection rather than just noted down.
 - **Scenario comparison** — duplicate your plan and try "retire at 60" or
   "spend $10k more" side by side.
 - **Your data, portable** — export/import a JSON backup; reset any time.

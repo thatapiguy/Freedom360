@@ -88,7 +88,7 @@ describe("projectHousehold", () => {
     household.primary.retirementAge = 65;
     household.primary.lifeExpectancy = 66;
     household.incomeSources = [];
-    household.oneTimeItems = [];
+    household.lifeEvents = [];
     household.assumptions.healthcareBridgeAnnual = 0;
     household.assumptions.annualRetirementSpending = 80_000;
     household.assumptions.withdrawalOrder = ["traditional"];
@@ -123,5 +123,75 @@ describe("projectHousehold", () => {
     for (const account of retirementYear.accounts) {
       expect(account.contributions).toBe(0);
     }
+  });
+
+  it("draws down account balances for a one-time expense life event before retirement", () => {
+    const household = createDefaultHousehold();
+    household.lifeEvents = [
+      {
+        id: "wedding",
+        name: "Wedding",
+        kind: "expense",
+        category: "wedding",
+        owner: "primary",
+        amount: 30_000,
+        timing: { mode: "oneTime", age: 40 },
+      },
+    ];
+    const withEvent = projectHousehold(household);
+    household.lifeEvents = [];
+    const withoutEvent = projectHousehold(household);
+
+    const yearIndex = 40 - household.primary.currentAge;
+    expect(withEvent.years[yearIndex].spendingNeed).toBeCloseTo(30_000, 0);
+    expect(withEvent.years[yearIndex].totalBalance).toBeLessThan(
+      withoutEvent.years[yearIndex].totalBalance
+    );
+    // The gap should persist (not get made up) in later years too.
+    expect(withEvent.finalBalance).toBeLessThan(withoutEvent.finalBalance);
+  });
+
+  it("adds a windfall life event to account balances before retirement", () => {
+    const household = createDefaultHousehold();
+    household.lifeEvents = [
+      {
+        id: "inheritance",
+        name: "Inheritance",
+        kind: "income",
+        category: "inheritance",
+        owner: "primary",
+        amount: 50_000,
+        timing: { mode: "oneTime", age: 45 },
+      },
+    ];
+    const withEvent = projectHousehold(household);
+    household.lifeEvents = [];
+    const withoutEvent = projectHousehold(household);
+
+    const yearIndex = 45 - household.primary.currentAge;
+    expect(withEvent.years[yearIndex].totalBalance).toBeGreaterThan(
+      withoutEvent.years[yearIndex].totalBalance
+    );
+  });
+
+  it("counts a recurring income life event as guaranteed income in retirement", () => {
+    const household = createDefaultHousehold();
+    household.primary.currentAge = 65;
+    household.primary.retirementAge = 65;
+    household.primary.lifeExpectancy = 70;
+    household.incomeSources = [];
+    household.lifeEvents = [
+      {
+        id: "rental",
+        name: "Rental income",
+        kind: "income",
+        category: "rental_income",
+        owner: "primary",
+        amount: 15_000,
+        timing: { mode: "recurring", startAge: 65, endAge: 69, growthPct: 0 },
+      },
+    ];
+    const result = projectHousehold(household);
+    expect(result.years[0].guaranteedIncome).toBeCloseTo(15_000, 0);
   });
 });

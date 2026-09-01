@@ -56,7 +56,7 @@ export function createDefaultHousehold(): Household {
         colaPct: 0,
       },
     ],
-    oneTimeItems: [],
+    lifeEvents: [],
     assumptions: {
       currentYear,
       filingStatus: "single",

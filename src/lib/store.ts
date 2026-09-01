@@ -2,13 +2,51 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Household, Scenario } from "@/lib/types";
+import type { Household, LifeEvent, Scenario } from "@/lib/types";
 import { createDefaultHousehold } from "@/lib/defaults";
 import { generateId } from "@/lib/id";
 
 function createScenarioObject(name: string, household: Household): Scenario {
   const now = Date.now();
   return { id: generateId(), name, createdAt: now, updatedAt: now, household };
+}
+
+/**
+ * Upgrades a household saved before the "life events" feature (which
+ * replaced the old flat `oneTimeItems` list) into the current shape.
+ * Already-current households pass through untouched.
+ */
+function normalizeHousehold(household: Record<string, unknown>): Household {
+  if (Array.isArray(household.lifeEvents)) return household as unknown as Household;
+
+  const oneTimeItems = Array.isArray(household.oneTimeItems)
+    ? (household.oneTimeItems as Array<{
+        id?: string;
+        name?: string;
+        age: number;
+        amount: number;
+      }>)
+    : [];
+  const lifeEvents: LifeEvent[] = oneTimeItems.map((item) => ({
+    id: item.id ?? generateId(),
+    name: item.name ?? "One-time item",
+    kind: item.amount >= 0 ? "expense" : "income",
+    category: item.amount >= 0 ? "other_expense" : "other_income",
+    owner: "primary",
+    amount: Math.abs(item.amount),
+    timing: { mode: "oneTime", age: item.age },
+  }));
+
+  const { oneTimeItems: _oldOneTimeItems, ...rest } = household;
+  void _oldOneTimeItems;
+  return { ...rest, lifeEvents } as unknown as Household;
+}
+
+function normalizeScenario(scenario: Scenario): Scenario {
+  return {
+    ...scenario,
+    household: normalizeHousehold(scenario.household as unknown as Record<string, unknown>),
+  };
 }
 
 interface PlannerState {
@@ -123,9 +161,10 @@ export const usePlannerStore = create<PlannerState>()(
           if (!Array.isArray(parsed.scenarios)) {
             return { ok: false, error: "File doesn't contain any scenarios." };
           }
+          const scenarios = (parsed.scenarios as Scenario[]).map(normalizeScenario);
           set({
-            scenarios: parsed.scenarios,
-            activeScenarioId: parsed.scenarios[0]?.id ?? initialScenario.id,
+            scenarios,
+            activeScenarioId: scenarios[0]?.id ?? initialScenario.id,
           });
           return { ok: true };
         } catch {
@@ -144,6 +183,14 @@ export const usePlannerStore = create<PlannerState>()(
     {
       name: "freedom360-planner",
       skipHydration: true,
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as { scenarios?: Scenario[]; activeScenarioId?: string };
+        return {
+          ...state,
+          scenarios: (state.scenarios ?? []).map(normalizeScenario),
+        };
+      },
       partialize: (state) => ({
         scenarios: state.scenarios,
         activeScenarioId: state.activeScenarioId,

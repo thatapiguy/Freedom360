@@ -1,5 +1,6 @@
 import type { Account, AccountType, Household } from "@/lib/types";
 import { bracketCeiling, estimateFederalTax, rmdDivisor } from "@/lib/calc/tax";
+import { computeLifeEventTotals } from "@/lib/calc/lifeEvents";
 
 /**
  * The Roth-conversion analysis below runs its own simplified, aggregated
@@ -10,7 +11,9 @@ import { bracketCeiling, estimateFederalTax, rmdDivisor } from "@/lib/calc/tax";
  * not a re-statement of the main dashboard projection (which uses your
  * chosen withdrawal strategy and per-account returns). It also always
  * assumes flat, inflation-adjusted spending in retirement so that dynamic
- * withdrawal-strategy noise doesn't obscure the conversion effect.
+ * withdrawal-strategy noise doesn't obscure the conversion effect. Life
+ * events are folded in using the same bucket-proportional approach as the
+ * main engine's accumulation phase (see lifeEvents.ts).
  */
 
 const MEDICARE_AGE = 65;
@@ -64,12 +67,6 @@ function guaranteedIncomeForYear(
     total += source.annualAmount * Math.pow(1 + source.colaPct, yearIndex);
   }
   return total;
-}
-
-function oneTimeNetForAge(household: Household, primaryAge: number): number {
-  return household.oneTimeItems
-    .filter((i) => i.age === primaryAge)
-    .reduce((sum, i) => sum + i.amount, 0);
 }
 
 export interface ConversionYearResult {
@@ -134,25 +131,30 @@ function simulate(
     let capitalGains = 0;
     let grossWithdrawal = 0;
 
+    const lifeEventTotals = computeLifeEventTotals(household, yearIndex, age, spouseAge);
+
     if (!isRetired) {
+      const lifeEventNet = lifeEventTotals.income - lifeEventTotals.expense;
+      const totalBucketBalance = Object.values(buckets).reduce((s, v) => s + v, 0);
       for (const type of Object.keys(buckets) as AccountType[]) {
         const start = buckets[type];
         const contrib = contributions[type];
-        const growth = start * returns[type] + contrib * returns[type] * 0.5;
-        buckets[type] = start + contrib + growth;
+        const balanceShare =
+          totalBucketBalance > 0 ? start / totalBucketBalance : 0.25;
+        const lifeEventShare = Math.max(lifeEventNet * balanceShare, -start);
+        const netFlow = contrib + lifeEventShare;
+        const growth = start * returns[type] + netFlow * returns[type] * 0.5;
+        buckets[type] = Math.max(0, start + netFlow + growth);
       }
+      ordinaryIncome += lifeEventTotals.income;
     } else {
-      const guaranteedIncome = guaranteedIncomeForYear(
-        household,
-        yearIndex,
-        age,
-        spouseAge
-      );
+      const guaranteedIncome =
+        guaranteedIncomeForYear(household, yearIndex, age, spouseAge) +
+        lifeEventTotals.income;
       const healthcareBridge =
         age < MEDICARE_AGE ? assumptions.healthcareBridgeAnnual : 0;
-      const oneTimeNet = oneTimeNetForAge(household, age);
       const spendingNeed =
-        assumptions.annualRetirementSpending + healthcareBridge + oneTimeNet;
+        assumptions.annualRetirementSpending + healthcareBridge + lifeEventTotals.expense;
       const targetGap = Math.max(0, spendingNeed - guaranteedIncome);
 
       const divisor = age >= RMD_START_AGE ? rmdDivisor(age) : undefined;

@@ -8,6 +8,7 @@ import type {
 } from "@/lib/types";
 import { estimateFederalTax, rmdDivisor } from "@/lib/calc/tax";
 import { computeWithdrawal } from "@/lib/calc/withdrawal";
+import { computeLifeEventTotals } from "@/lib/calc/lifeEvents";
 
 export interface ProjectionOptions {
   /** Return a real annual return for this account on this year index (0-based from currentYear). Falls back to account.expectedReturn. */
@@ -51,12 +52,6 @@ function computeGuaranteedIncome(
     total += incomeValueForYear(source, ownerAge, yearIndex);
   }
   return total;
-}
-
-function computeOneTimeNet(household: Household, primaryAge: number): number {
-  return household.oneTimeItems
-    .filter((item) => item.age === primaryAge)
-    .reduce((sum, item) => sum + item.amount, 0);
 }
 
 interface AccountState {
@@ -104,6 +99,12 @@ export function projectHousehold(
       spouseAge,
       extraIncomeSources
     );
+    const lifeEventTotals = computeLifeEventTotals(
+      household,
+      yearIndex,
+      primaryAge,
+      spouseAge
+    );
 
     const accountBreakdowns: AccountYearBreakdown[] = [];
     let totalBalanceStart = 0;
@@ -112,24 +113,37 @@ export function projectHousehold(
     let grossWithdrawal = 0;
     let spendingNeed = 0;
     let taxesPaid = 0;
+    const reportedGuaranteedIncome = guaranteedIncome + lifeEventTotals.income;
 
     if (phase === "accumulation") {
-      spendingNeed = 0;
+      spendingNeed = lifeEventTotals.expense;
+      // Life events before retirement (a wedding, an inheritance) aren't
+      // funded by a withdrawal-order sequence — accounts are still
+      // accumulating — so the net cash flow is spread across accounts in
+      // proportion to their current balance, floored so no account goes
+      // negative from a single year's expense.
+      const lifeEventNet = lifeEventTotals.income - lifeEventTotals.expense;
       for (const state of accountStates) {
         const startBalance = state.balance;
         const contributions =
           state.account.annualContribution + state.account.employerMatch;
+        const balanceShare =
+          totalBalanceStart > 0 ? startBalance / totalBalanceStart : 1 / accountStates.length;
+        const lifeEventShare = Math.max(lifeEventNet * balanceShare, -startBalance);
+        const depositFromLifeEvent = Math.max(0, lifeEventShare);
+        const withdrawalFromLifeEvent = Math.max(0, -lifeEventShare);
+        const netFlow = contributions + lifeEventShare;
         const rate =
           options.returnForYear?.(state.account, yearIndex) ??
           state.account.expectedReturn;
-        const growth = startBalance * rate + contributions * rate * 0.5;
-        const endBalance = startBalance + contributions + growth;
+        const growth = startBalance * rate + netFlow * rate * 0.5;
+        const endBalance = Math.max(0, startBalance + netFlow + growth);
         accountBreakdowns.push({
           type: state.account.type,
           startBalance,
-          contributions,
+          contributions: contributions + depositFromLifeEvent,
           growth,
-          withdrawals: 0,
+          withdrawals: withdrawalFromLifeEvent,
           endBalance,
         });
         state.balance = endBalance;
@@ -137,10 +151,9 @@ export function projectHousehold(
     } else {
       const healthcareBridge =
         primaryAge < MEDICARE_AGE ? assumptions.healthcareBridgeAnnual : 0;
-      const oneTimeNet = computeOneTimeNet(household, primaryAge);
       spendingNeed =
-        assumptions.annualRetirementSpending + healthcareBridge + oneTimeNet;
-      const targetGap = Math.max(0, spendingNeed - guaranteedIncome);
+        assumptions.annualRetirementSpending + healthcareBridge + lifeEventTotals.expense;
+      const targetGap = Math.max(0, spendingNeed - reportedGuaranteedIncome);
 
       if (yearsIntoRetirement === 0) {
         initialWithdrawal = targetGap;
@@ -256,7 +269,7 @@ export function projectHousehold(
       };
 
       const spendingIncome = incomeFromWithdrawals(withdrawnByAccount);
-      const ordinaryIncome = guaranteedIncome + spendingIncome.ordinary;
+      const ordinaryIncome = reportedGuaranteedIncome + spendingIncome.ordinary;
       const capitalGains = spendingIncome.gains;
 
       taxesPaid = estimateFederalTax({
@@ -310,11 +323,12 @@ export function projectHousehold(
       phase,
       totalBalance: totalBalanceEnd,
       accounts: accountBreakdowns,
-      guaranteedIncome,
+      guaranteedIncome: reportedGuaranteedIncome,
       spendingNeed,
       grossWithdrawal,
       taxesPaid,
-      netCashFlow: guaranteedIncome + grossWithdrawal - taxesPaid - spendingNeed,
+      netCashFlow:
+        reportedGuaranteedIncome + grossWithdrawal - taxesPaid - spendingNeed,
       depleted,
     });
   }

@@ -58,13 +58,54 @@ export interface IncomeSource {
   colaPct: number;
 }
 
-export interface OneTimeItem {
+export type SpendingGoalCategory =
+  | "charity_gift"
+  | "dependent_support"
+  | "education"
+  | "health_care"
+  | "home_purchase"
+  | "renovation"
+  | "vacation"
+  | "vehicle"
+  | "wedding"
+  | "other_expense";
+
+export type IncomeEventCategory =
+  | "annuity_income"
+  | "inheritance"
+  | "pension_income"
+  | "rental_income"
+  | "sale_of_property"
+  | "work_during_retirement"
+  | "other_income";
+
+export type LifeEventCategory = SpendingGoalCategory | IncomeEventCategory;
+
+export type LifeEventTiming =
+  | { mode: "oneTime"; age: number }
+  | {
+      mode: "recurring";
+      startAge: number;
+      endAge: number;
+      /** Annual REAL growth rate applied while the event is active, same convention as IncomeSource.colaPct. */
+      growthPct: number;
+    };
+
+/**
+ * A spending goal or income event tied to a specific stage of life — a
+ * wedding, a home purchase, an inheritance, a few years of part-time work
+ * in retirement. Unlike the household's core guaranteed-income list, these
+ * can land at any age, before or after retirement.
+ */
+export interface LifeEvent {
   id: string;
   name: string;
-  /** Primary person's age when this occurs. */
-  age: number;
-  /** Positive = one-time expense, negative = windfall/income. */
+  kind: "expense" | "income";
+  category: LifeEventCategory;
+  owner: "primary" | "spouse";
+  /** One-time: the total lump sum. Recurring: the annual amount, in today's dollars. */
   amount: number;
+  timing: LifeEventTiming;
 }
 
 export type WithdrawalStrategy = "fixedReal" | "guytonKlinger" | "vpw";
@@ -78,7 +119,7 @@ export interface Assumptions {
    * done in real (today's) dollars.
    */
   inflationRate: number;
-  /** Annual retirement spending target in today's dollars (excludes healthcare bridge & one-time items). */
+  /** Annual retirement spending target in today's dollars (excludes healthcare bridge & life events). */
   annualRetirementSpending: number;
   /** Extra annual healthcare spending in today's dollars before Medicare eligibility (65). */
   healthcareBridgeAnnual: number;
@@ -95,7 +136,7 @@ export interface Household {
   spouse?: Person;
   accounts: Account[];
   incomeSources: IncomeSource[];
-  oneTimeItems: OneTimeItem[];
+  lifeEvents: LifeEvent[];
   assumptions: Assumptions;
 }
 

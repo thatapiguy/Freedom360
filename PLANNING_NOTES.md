@@ -59,6 +59,27 @@ inflation-adjusted spending, so results won't exactly match your dashboard
 projection (which uses your chosen withdrawal strategy) — treat it as a
 focused comparison tool, not a restatement of the dashboard.
 
+## Life events (spending goals & income events)
+
+A life event (a wedding, an inheritance, a stretch of part-time work) can be
+one-time or recurring over an age range, and can land before or after
+retirement — unlike the original one-time-items list, these actually affect
+account balances during the accumulation phase, not just retirement:
+
+- **During retirement**, a life event behaves like the rest of the engine:
+  income reduces the portfolio-funded spending gap, expenses increase it,
+  and both flow through the same tax treatment as guaranteed income
+  (see Taxes above).
+- **Before retirement**, there's no per-account withdrawal-order machinery
+  (accounts are still accumulating), so a life event's net cash flow for
+  the year is spread across your accounts in proportion to their current
+  balance, floored so a single year's expense can't push an account
+  negative. This is a simplification: it doesn't respect your withdrawal
+  order preference for *which* account absorbs a pre-retirement expense.
+- A recurring life event's annual amount grows from the plan's start year
+  (age today), the same convention as guaranteed income's "real growth"
+  field — not from when the event itself starts.
+
 ## Monte Carlo
 
 Each simulated year draws one shared "market shock" applied to every
@@ -75,7 +96,7 @@ distributions (no fat tails, no autocorrelation).
 - No Social Security claiming-age optimizer (compare 62 vs. FRA vs. 70) —
   model this manually today by adding a second "what if I claim later"
   scenario in Compare Scenarios.
-- One-time items and the healthcare bridge are folded into the spending
-  baseline a withdrawal strategy tracks, so a very large one-time item in
+- Life events and the healthcare bridge are folded into the spending
+  baseline a withdrawal strategy tracks, so a very large life event in
   your first retirement year can skew a guardrail/variable strategy's
   ongoing behavior.
