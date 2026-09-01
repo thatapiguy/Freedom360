@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <StoreHydration />
         <NavBar />
         <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8">
